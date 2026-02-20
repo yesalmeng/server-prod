@@ -145,35 +145,39 @@ async function maskColumn(
   }
 
   const nullFreq = rule.nullFrequency ?? 0;
+  const CHUNK_SIZE = 25;
 
-  const updates = rowsToMask.map((row) => {
-    const newValue =
-      nullFreq > 0 && Math.random() < nullFreq
-        ? null
-        : rule.generator();
+  for (let i = 0; i < rowsToMask.length; i += CHUNK_SIZE) {
+    const chunk = rowsToMask.slice(i, i + CHUNK_SIZE);
 
-    // where clause for composite or simple key
-    let whereClause: Record<string, unknown>;
-    if (Array.isArray(primaryKey)) {
-      // composite keys, Prisma uses: { key1_key2: { key1: val1, key2: val2 } }
-      const compositeKeyName = pkFields.join('_');
-      const compositeKeyValue: Record<string, unknown> = {};
-      for (const pkField of pkFields) {
-        compositeKeyValue[pkField] = row[pkField];
+    const updates = chunk.map((row) => {
+      const newValue =
+        nullFreq > 0 && Math.random() < nullFreq
+          ? null
+          : rule.generator();
+
+      // where clause for composite or simple key
+      let whereClause: Record<string, unknown>;
+      if (Array.isArray(primaryKey)) {
+        // composite keys, Prisma uses: { key1_key2: { key1: val1, key2: val2 } }
+        const compositeKeyName = pkFields.join('_');
+        const compositeKeyValue: Record<string, unknown> = {};
+        for (const pkField of pkFields) {
+          compositeKeyValue[pkField] = row[pkField];
+        }
+        whereClause = { [compositeKeyName]: compositeKeyValue };
+      } else {
+        whereClause = { [primaryKey]: row[primaryKey] };
       }
-      whereClause = { [compositeKeyName]: compositeKeyValue };
-    } else {
-      whereClause = { [primaryKey]: row[primaryKey] };
-    }
 
-    return delegate.update({
-      where: whereClause,
-      data: { [column]: newValue },
-    });
-  }) as unknown[];
+      return delegate.update({
+        where: whereClause,
+        data: { [column]: newValue },
+      });
+    }) as unknown[];
 
-  // Updates are executed within the parent transaction
-  await Promise.all(updates);
+    await Promise.all(updates);
+  }
 
   console.log(`  Masked ${rowsToMask.length} rows in ${table}.${column}`);
 }
