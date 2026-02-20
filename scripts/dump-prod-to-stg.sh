@@ -64,7 +64,7 @@ log "step 2 : done"
 # These emails match auth.users and are skipped by the obfuscator.
 log "step 3 : seeding dev test members"
 
-psql "$STAGING_DB_URL" -f "$SCRIPT_DIR/seed-dev-members.sql"
+# psql "$STAGING_DB_URL" -f "$SCRIPT_DIR/seed-dev-members.sql"
 
 log "step 3 : done"
 log "dump complete — staging is ready for obfuscation"
