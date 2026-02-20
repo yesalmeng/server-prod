@@ -1,0 +1,260 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  schemas = ["public", "audit"]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model group {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  leader_id     String          @db.Uuid
+  community     Int             @db.SmallInt
+  archived      Boolean?        @default(false)
+  term          String?
+  member        member          @relation(fields: [leader_id], references: [id], onDelete: NoAction)
+  group_meeting group_meeting[]
+  group_member  group_member[]
+
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model group_meeting {
+  id                   String                 @id @db.Uuid
+  group_id             String                 @db.Uuid
+  meeting_date         DateTime               @db.Date
+  notes                String?
+  created_by           String                 @db.Uuid
+  created_at           DateTime               @default(now()) @db.Timestamp(6)
+  updated_at           DateTime               @default(now()) @db.Timestamp(6)
+  user                 user                   @relation(fields: [created_by], references: [id], onDelete: NoAction)
+  group                group                  @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  group_meeting_record group_meeting_record[]
+
+  @@unique([group_id, meeting_date], map: "unique_group_meeting_date")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model group_meeting_record {
+  group_meeting_id String        @db.Uuid
+  member_id        String        @db.Uuid
+  group_attended   Boolean
+  worship_attended Boolean
+  prayer_request   String?
+  created_at       DateTime      @default(now()) @db.Timestamp(6)
+  updated_at       DateTime      @default(now()) @db.Timestamp(6)
+  group_meeting    group_meeting @relation(fields: [group_meeting_id], references: [id], onDelete: Cascade)
+  member           member        @relation(fields: [member_id], references: [id], onDelete: Cascade)
+
+  @@id([group_meeting_id, member_id])
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model group_member {
+  group_id  String @db.Uuid
+  member_id String @db.Uuid
+  group     group  @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  member    member @relation(fields: [member_id], references: [id], onDelete: Cascade)
+
+  @@id([group_id, member_id])
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model internal_team_application {
+  id           BigInt   @id @default(autoincrement())
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  name         String
+  email        String
+  phone        String
+  interest     String
+  confirmation Boolean
+  tithe        Boolean
+
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model member {
+  created_at           DateTime               @default(dbgenerated("(now() AT TIME ZONE 'utc'::text)")) @db.Timestamp(6)
+  name_in_korean       String?
+  name                 String?
+  sex                  Int?                   @db.SmallInt
+  dob                  DateTime?              @db.Date
+  phone_number         String?
+  email                String?
+  address              String?
+  is_baptized          Boolean?
+  is_confirmed         Boolean?
+  status               String?
+  church_id            Int?
+  id                   String                 @id @unique(map: "member_uid_key") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  updated_at           DateTime?              @db.Timestamp(6)
+  test_col             Boolean?
+  profile_image_id     String?                @db.Uuid
+  group                group[]
+  group_meeting_record group_meeting_record[]
+  group_member         group_member[]
+  pastoral_note        pastoral_note[]
+  profile_image        profile_image?         @relation("member_profile_image", fields: [profile_image_id], references: [id], onDelete: SetNull)
+  profile_images       profile_image[]        @relation("profile_image_member")
+
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model permission {
+  id              BigInt            @id @default(autoincrement())
+  slug            String
+  created_at      DateTime          @default(dbgenerated("(now() AT TIME ZONE 'utc'::text)")) @db.Timestamptz(6)
+  updated_at      DateTime          @default(dbgenerated("(now() AT TIME ZONE 'utc'::text)")) @db.Timestamptz(6)
+  role_permission role_permission[]
+
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model role {
+  id              BigInt            @id @default(autoincrement())
+  description     String
+  created_at      DateTime          @default(dbgenerated("(now() AT TIME ZONE 'utc'::text)")) @db.Timestamptz(6)
+  updated_at      DateTime          @default(dbgenerated("(now() AT TIME ZONE 'utc'::text)")) @db.Timestamptz(6)
+  role_permission role_permission[]
+  user_role       user_role[]
+
+  @@schema("public")
+}
+
+model role_permission {
+  id            BigInt     @id @default(autoincrement())
+  role_id       BigInt
+  permission_id BigInt
+  created_at    DateTime   @default(dbgenerated("(now() AT TIME ZONE 'utc'::text)")) @db.Timestamptz(6)
+  updated_at    DateTime   @default(dbgenerated("(now() AT TIME ZONE 'utc'::text)")) @db.Timestamptz(6)
+  permission    permission @relation(fields: [permission_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  role          role       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model test_table_to_test_for_api {
+  id           BigInt    @id @default(autoincrement())
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  text_column  String?
+  phone_number String?
+  name         String?
+
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model profile_image {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  member_id      String   @db.Uuid
+  object_key     String
+  e_tag          String
+  content_type   String
+  size           Int
+  variant        String   @default("original")
+  created_at     DateTime @default(dbgenerated("(now() AT TIME ZONE 'utc'::text)")) @db.Timestamptz(6)
+  member         member   @relation("profile_image_member", fields: [member_id], references: [id], onDelete: Cascade)
+  member_current member[] @relation("member_profile_image")
+
+  @@unique([member_id, variant], name: "member_id_variant")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model user {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  created_at    DateTime        @default(dbgenerated("(now() AT TIME ZONE 'utc'::text)")) @db.Timestamptz(6)
+  google_id     Decimal         @unique @db.Decimal
+  email         String
+  given_name    String
+  family_name   String
+  name          String
+  group_meeting group_meeting[]
+  pastoral_note pastoral_note[]
+  user_role     user_role?
+  audit_log     audit_log[]
+
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model user_role {
+  id         BigInt   @id @default(autoincrement())
+  user_id    String   @unique @db.Uuid
+  role_id    BigInt
+  created_at DateTime @default(dbgenerated("(now() AT TIME ZONE 'utc'::text)")) @db.Timestamptz(6)
+  updated_at DateTime @default(dbgenerated("(now() AT TIME ZONE 'utc'::text)")) @db.Timestamptz(6)
+  role       role     @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user       user     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model test_table {
+  id           BigInt    @id(map: "test_table_pkey") @default(autoincrement())
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  text_column  String?
+  phone_number String?
+  name         String?
+  
+  @@schema("public")
+}
+
+enum publication_status {
+  draft
+  published
+
+  @@schema("public")
+}
+
+/// Audit trail table in the audit schema
+model audit_log {
+  id            BigInt   @id @default(autoincrement())
+  occurred_at DateTime @default(dbgenerated("statement_timestamp()")) @db.Timestamptz(6)
+  table_name    String
+  operation     String
+  actor_user_id String?  @db.Uuid
+  actor_role_id BigInt?
+  row_pk        Json?
+  old_row       Json?
+  new_row       Json?
+  diff          Json?
+  
+  // Optional: Add relation to user table
+  user          user?    @relation(fields: [actor_user_id], references: [id], onDelete: NoAction)
+
+  @@map("audit_log")
+  @@schema("audit")
+}
+
+/// Pastoral notes for member shepherding journal
+model pastoral_note {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  member_id      String   @db.Uuid
+  author_user_id String   @db.Uuid
+  type           String   @default("GENERAL")
+  title          String
+  content        String?
+  visit_date     DateTime? @db.Date
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @db.Timestamptz(6)
+  member         member   @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  author         user     @relation(fields: [author_user_id], references: [id], onDelete: Cascade)
+
+  @@index([member_id, created_at(sort: Desc)], name: "idx_pastoral_note_member_created")
+  @@schema("public")
+}
