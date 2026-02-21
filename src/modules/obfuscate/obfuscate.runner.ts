@@ -145,38 +145,31 @@ async function maskColumn(
   }
 
   const nullFreq = rule.nullFrequency ?? 0;
-  const CHUNK_SIZE = 25;
 
-  for (let i = 0; i < rowsToMask.length; i += CHUNK_SIZE) {
-    const chunk = rowsToMask.slice(i, i + CHUNK_SIZE);
+  // Sequential updates — required for stability with connection poolers
+  for (const row of rowsToMask) {
+    const newValue =
+      nullFreq > 0 && Math.random() < nullFreq
+        ? null
+        : rule.generator();
 
-    const updates = chunk.map((row) => {
-      const newValue =
-        nullFreq > 0 && Math.random() < nullFreq
-          ? null
-          : rule.generator();
-
-      // where clause for composite or simple key
-      let whereClause: Record<string, unknown>;
-      if (Array.isArray(primaryKey)) {
-        // composite keys, Prisma uses: { key1_key2: { key1: val1, key2: val2 } }
-        const compositeKeyName = pkFields.join('_');
-        const compositeKeyValue: Record<string, unknown> = {};
-        for (const pkField of pkFields) {
-          compositeKeyValue[pkField] = row[pkField];
-        }
-        whereClause = { [compositeKeyName]: compositeKeyValue };
-      } else {
-        whereClause = { [primaryKey]: row[primaryKey] };
+    // where clause for composite or simple key
+    let whereClause: Record<string, unknown>;
+    if (Array.isArray(primaryKey)) {
+      const compositeKeyName = pkFields.join('_');
+      const compositeKeyValue: Record<string, unknown> = {};
+      for (const pkField of pkFields) {
+        compositeKeyValue[pkField] = row[pkField];
       }
+      whereClause = { [compositeKeyName]: compositeKeyValue };
+    } else {
+      whereClause = { [primaryKey]: row[primaryKey] };
+    }
 
-      return delegate.update({
-        where: whereClause,
-        data: { [column]: newValue },
-      });
-    }) as unknown[];
-
-    await Promise.all(updates);
+    await delegate.update({
+      where: whereClause,
+      data: { [column]: newValue },
+    });
   }
 
   console.log(`  Masked ${rowsToMask.length} rows in ${table}.${column}`);
