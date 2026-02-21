@@ -7,7 +7,7 @@ datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
-  schemas = ["public", "audit"]
+  schemas   = ["audit", "public"]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -103,8 +103,8 @@ model member {
   group                group[]
   group_meeting_record group_meeting_record[]
   group_member         group_member[]
+  profile_image        profile_image?         @relation("member_profile_image", fields: [profile_image_id], references: [id], onUpdate: NoAction)
   pastoral_note        pastoral_note[]
-  profile_image        profile_image?         @relation("member_profile_image", fields: [profile_image_id], references: [id], onDelete: SetNull)
   profile_images       profile_image[]        @relation("profile_image_member")
 
   @@schema("public")
@@ -146,17 +146,6 @@ model role_permission {
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model test_table_to_test_for_api {
-  id           BigInt    @id @default(autoincrement())
-  created_at   DateTime? @default(now()) @db.Timestamptz(6)
-  text_column  String?
-  phone_number String?
-  name         String?
-
-  @@schema("public")
-}
-
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model profile_image {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   member_id      String   @db.Uuid
@@ -166,10 +155,11 @@ model profile_image {
   size           Int
   variant        String   @default("original")
   created_at     DateTime @default(dbgenerated("(now() AT TIME ZONE 'utc'::text)")) @db.Timestamptz(6)
-  member         member   @relation("profile_image_member", fields: [member_id], references: [id], onDelete: Cascade)
   member_current member[] @relation("member_profile_image")
+  member         member   @relation("profile_image_member", fields: [member_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@unique([member_id, variant], name: "member_id_variant")
+  @@unique([member_id, variant], map: "idx_profile_image_member_variant")
+  @@index([member_id], map: "idx_profile_image_member_id")
   @@schema("public")
 }
 
@@ -185,7 +175,6 @@ model user {
   group_meeting group_meeting[]
   pastoral_note pastoral_note[]
   user_role     user_role?
-  audit_log     audit_log[]
 
   @@schema("public")
 }
@@ -205,18 +194,11 @@ model user_role {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model test_table {
-  id           BigInt    @id(map: "test_table_pkey") @default(autoincrement())
+  id           BigInt    @id(map: "test_table_to_test_for_api_pkey") @default(autoincrement())
   created_at   DateTime? @default(now()) @db.Timestamptz(6)
   text_column  String?
   phone_number String?
   name         String?
-  
-  @@schema("public")
-}
-
-enum publication_status {
-  draft
-  published
 
   @@schema("public")
 }
@@ -224,7 +206,7 @@ enum publication_status {
 /// Audit trail table in the audit schema
 model audit_log {
   id            BigInt   @id @default(autoincrement())
-  occurred_at DateTime @default(dbgenerated("statement_timestamp()")) @db.Timestamptz(6)
+  occurred_at   DateTime @default(dbgenerated("statement_timestamp()")) @db.Timestamptz(6)
   table_name    String
   operation     String
   actor_user_id String?  @db.Uuid
@@ -233,9 +215,6 @@ model audit_log {
   old_row       Json?
   new_row       Json?
   diff          Json?
-  
-  // Optional: Add relation to user table
-  user          user?    @relation(fields: [actor_user_id], references: [id], onDelete: NoAction)
 
   @@map("audit_log")
   @@schema("audit")
@@ -243,18 +222,25 @@ model audit_log {
 
 /// Pastoral notes for member shepherding journal
 model pastoral_note {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  member_id      String   @db.Uuid
-  author_user_id String   @db.Uuid
-  type           String   @default("GENERAL")
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  member_id      String    @db.Uuid
+  author_user_id String    @db.Uuid
+  type           String    @default("GENERAL")
   title          String
   content        String?
   visit_date     DateTime? @db.Date
-  created_at     DateTime @default(now()) @db.Timestamptz(6)
-  updated_at     DateTime @default(now()) @db.Timestamptz(6)
-  member         member   @relation(fields: [member_id], references: [id], onDelete: Cascade)
-  author         user     @relation(fields: [author_user_id], references: [id], onDelete: Cascade)
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime  @default(now()) @db.Timestamptz(6)
+  author         user      @relation(fields: [author_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  member         member    @relation(fields: [member_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@index([member_id, created_at(sort: Desc)], name: "idx_pastoral_note_member_created")
+  @@index([member_id, created_at(sort: Desc)], map: "idx_pastoral_note_member_created")
+  @@schema("public")
+}
+
+enum publication_status {
+  draft
+  published
+
   @@schema("public")
 }
