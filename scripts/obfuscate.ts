@@ -5,14 +5,7 @@ import { runObfuscation } from "../src/modules/obfuscate/obfuscate.runner";
 dotenv.config();
 
 async function main() {
-  // Use DIRECT_URL to bypass PgBouncer (transaction mode) which breaks
-  // Prisma prepared statements inside interactive transactions.
-  const directUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
-  const prisma = new PrismaClient({
-    datasources: {
-      db: { url: directUrl },
-    },
-  });
+  const prisma = new PrismaClient();
 
   try {
     await prisma.$connect();
