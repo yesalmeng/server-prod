@@ -64,9 +64,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: dump-to-staging
     environment: staging
-    concurrency:
-      group: dump-obfuscate
-      cancel-in-progress: false
+    # concurrency:
+    #   group: dump-obfuscate
+    #   cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
