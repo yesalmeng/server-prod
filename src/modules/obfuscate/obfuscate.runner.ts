@@ -37,21 +37,44 @@ export async function runObfuscation(prisma: PrismaClient): Promise<void> {
 
   await prisma.$transaction(
     async (tx) => {
+      const rawTx = tx as unknown as RawClient;
+
+      // Disable audit triggers so obfuscation updates don't insert into
+      // audit.audit_log (avoids identity-sequence conflicts and noise).
+      const tables = Object.keys(maskingConfig);
+      for (const table of tables) {
+        await rawTx.$executeRawUnsafe(
+          `ALTER TABLE "public"."${table}" DISABLE TRIGGER USER`
+        );
+      }
+      console.log(`Disabled triggers on: ${tables.join(", ")}`);
+
       let success = 0;
       const skipIdsCache = new Map<string, Set<string>>();
 
-      for (const [table, tableConfig] of Object.entries(maskingConfig)) {
-        const skipIds = await getSkipIds(tx, table, userEmails, skipIdsCache);
-        const primaryKey = tableConfig.primaryKey || "id";
-        for (const [column, rule] of Object.entries(tableConfig.columns)) {
-          try {
-            await maskColumn(tx, table, column, rule, skipIds, primaryKey);
-            success++;
-          } catch (err) {
-            console.error(`Failed to mask ${table}.${column}:`, err);
-            throw err;
+      try {
+        for (const [table, tableConfig] of Object.entries(maskingConfig)) {
+          const skipIds = await getSkipIds(tx, table, userEmails, skipIdsCache);
+          const primaryKey = tableConfig.primaryKey || "id";
+          for (const [column, rule] of Object.entries(tableConfig.columns)) {
+            try {
+              await maskColumn(tx, table, column, rule, skipIds, primaryKey);
+              success++;
+            } catch (err) {
+              console.error(`Failed to mask ${table}.${column}:`, err);
+              throw err;
+            }
           }
         }
+      } finally {
+        // Re-enable triggers even if masking fails, so the DB isn't left
+        // in a broken state after the transaction commits/rolls back.
+        for (const table of tables) {
+          await rawTx.$executeRawUnsafe(
+            `ALTER TABLE "public"."${table}" ENABLE TRIGGER USER`
+          );
+        }
+        console.log(`Re-enabled triggers on: ${tables.join(", ")}`);
       }
 
       const elapsed = ((Date.now() - start) / 1000).toFixed(2);
