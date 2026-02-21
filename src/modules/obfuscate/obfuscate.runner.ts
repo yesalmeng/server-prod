@@ -146,8 +146,7 @@ async function maskColumn(
 
   const nullFreq = rule.nullFrequency ?? 0;
 
-  // Sequential updates — required for stability with connection poolers
-  for (const row of rowsToMask) {
+  const updates = rowsToMask.map((row) => {
     const newValue =
       nullFreq > 0 && Math.random() < nullFreq
         ? null
@@ -156,6 +155,7 @@ async function maskColumn(
     // where clause for composite or simple key
     let whereClause: Record<string, unknown>;
     if (Array.isArray(primaryKey)) {
+      // composite keys, Prisma uses: { key1_key2: { key1: val1, key2: val2 } }
       const compositeKeyName = pkFields.join('_');
       const compositeKeyValue: Record<string, unknown> = {};
       for (const pkField of pkFields) {
@@ -166,11 +166,14 @@ async function maskColumn(
       whereClause = { [primaryKey]: row[primaryKey] };
     }
 
-    await delegate.update({
+    return delegate.update({
       where: whereClause,
       data: { [column]: newValue },
     });
-  }
+  }) as unknown[];
+
+  // Updates are executed within the parent transaction
+  await Promise.all(updates);
 
   console.log(`  Masked ${rowsToMask.length} rows in ${table}.${column}`);
 }
