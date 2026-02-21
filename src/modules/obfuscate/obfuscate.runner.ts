@@ -17,8 +17,8 @@ export async function runObfuscation(prisma: PrismaClient): Promise<void> {
 
   const start = Date.now();
 
-  // const userEmails = await getUserEmails(prisma);
-  // console.log(`Loaded ${userEmails.size} user emails for skip logic`);
+  const userEmails = await getUserEmails(prisma);
+  console.log(`Loaded ${userEmails.size} user emails for skip logic`);
 
   // Wrap entire obfuscation in a single transaction for atomicity
   await prisma.$transaction(
@@ -27,8 +27,7 @@ export async function runObfuscation(prisma: PrismaClient): Promise<void> {
       const skipIdsCache = new Map<string, Set<string>>();
 
       for (const [table, tableConfig] of Object.entries(maskingConfig)) {
-        // const skipIds = await getSkipIds(tx, table, userEmails, skipIdsCache);
-        const skipIds = new Set<string>();
+        const skipIds = await getSkipIds(tx, table, userEmails, skipIdsCache);
         const primaryKey = tableConfig.primaryKey || "id";
         for (const [column, rule] of Object.entries(tableConfig.columns)) {
           try {
@@ -131,8 +130,7 @@ async function maskColumn(
     return String(row[primaryKey as string]);
   };
 
-  // const rowsToMask = rows.filter((r) => !skipIds.has(getRowKey(r)));
-  const rowsToMask = rows;
+  const rowsToMask = rows.filter((r) => !skipIds.has(getRowKey(r)));
   const skipped = rows.length - rowsToMask.length;
 
   if (skipped > 0) {
