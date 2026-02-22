@@ -57,7 +57,7 @@ export const maskingConfig: MaskingConfig = {
       text_column: {
         generator: () => fakerKO.lorem.sentence(),
         nullFrequency: 0.1,
-      }, 
+      },
       phone_number: {
         generator: () => faker.phone.number(),
       },
@@ -71,3 +71,5 @@ export const maskingConfig: MaskingConfig = {
 export const skipEmailMatchTables: string[] = ["member"];
 
 export const OBFUSCATION_TIMEOUT_MS = 60_000;
+
+export const BATCH_SIZE = 500;

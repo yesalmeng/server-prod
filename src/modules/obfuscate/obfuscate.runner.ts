@@ -3,7 +3,8 @@ import {
   type ColumnRule,
   maskingConfig,
   skipEmailMatchTables,
-  OBFUSCATION_TIMEOUT_MS
+  OBFUSCATION_TIMEOUT_MS,
+  BATCH_SIZE
 } from "./obfuscate.config"
 
 type PrismaDelegate = {
@@ -19,11 +20,6 @@ type RowWithValue = {
   row: Record<string, unknown>;
   newValue: unknown;
 };
-
-// Tune this based on your DB's max parameter limits.
-// PostgreSQL supports up to 65535 params; at (pkFields.length + 1) params per row,
-// this gives comfortable headroom for most schemas.
-const BATCH_SIZE = 500;
 
 export async function runObfuscation(prisma: PrismaClient): Promise<void> {
   console.log("=".repeat(60));
