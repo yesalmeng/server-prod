@@ -78,8 +78,34 @@ jobs:
         run: pnpm install
       - name: Generate Prisma client
         run: pnpm db:generate
+      # TODO: Remove this step — intentional failure to test wipe-on-failure
+      - name: Force failure (test)
+        run: exit 1
       - name: Run obfuscation
         run: pnpm run obfuscate
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      - name: Wipe staging data on failure
+        if: failure()
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          psql "$DIRECT_URL" <<'SQL'
+          DO $$
+          DECLARE
+              tbl text;
+          BEGIN
+              FOR tbl IN
+                  SELECT tablename
+                  FROM   pg_tables
+                  WHERE  schemaname = 'public'
+              LOOP
+                  EXECUTE format('TRUNCATE TABLE public.%I CASCADE', tbl);
+                  RAISE NOTICE 'truncated public.%', tbl;
+              END LOOP;
+          END;
+          $$;
+          SQL
+          echo "⚠️  Staging wiped — obfuscation failed, no unmasked data left."
+        env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
