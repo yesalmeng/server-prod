@@ -64,9 +64,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: dump-to-staging
     environment: staging
-    # concurrency:
-    #   group: dump-obfuscate
-    #   cancel-in-progress: false
+    concurrency:
+      group: dump-obfuscate
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -78,9 +78,9 @@ jobs:
         run: pnpm install
       - name: Generate Prisma client
         run: pnpm db:generate
-      # TODO: Remove this step — intentional failure to test wipe-on-failure
-      - name: Force failure (test)
-        run: exit 1
+      # intentional failure to test wipe-on-failure -- REMOVE AFTER confirming we truncate tables after failing obfuscation job
+      # - name: Force failure (test)
+      #   run: exit 1
       - name: Run obfuscation
         run: pnpm run obfuscate
         env:
