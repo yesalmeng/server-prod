@@ -25,11 +25,24 @@ fail() { echo "!!! [$(date '+%H:%M:%S')] ERROR: $*" >&2; exit 1; }
 command -v psql       >/dev/null 2>&1 || fail "psql not found"
 command -v supabase   >/dev/null 2>&1 || fail "supabase CLI not found"
 
-# step 1: truncate all public tables 
+# step 1: link to prod + dump to temp file
+# Dump first BEFORE truncating so staging keeps old data if dump fails.
+log "step 1 : linking to prod project"
+supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+log "step 1 : dumping prod data to temp file (public schema only)"
+TEMP_DUMP=$(mktemp)
+trap "rm -f $TEMP_DUMP" EXIT  # clean up temp file on exit
+supabase db dump --data-only --schema=public > "$TEMP_DUMP"
+
+log "step 1 : done"
+
+# step 2: truncate all public tables
+# Only runs after dump succeeds — staging keeps old data if dump failed.
 # Dynamically truncate every table in the public schema.
 # CASCADE handles foreign key deps. We skip views.
-# Note: audit schema is preserved (not truncated, not dumped in step 2).
-log "step 1 : truncating public tables in staging"
+# Note: audit schema is preserved (not truncated, not loaded in step 3).
+log "step 2 : truncating public tables in staging"
 
 psql "$STAGING_DB_URL" <<'SQL'
 DO $$
@@ -48,18 +61,10 @@ END;
 $$;
 SQL
 
-log "step 1 : done"
+log "step 2 : done"
 
-# step 2: link to prod + dump to temp file
-log "step 2 : linking to prod project"
-supabase link --project-ref "$SUPABASE_PROJECT_REF"
-
-log "step 2 : dumping prod data to temp file (public schema only)"
-TEMP_DUMP=$(mktemp)
-trap "rm -f $TEMP_DUMP" EXIT  # clean up temp file on exit
-supabase db dump --data-only --schema=public > "$TEMP_DUMP"
-
-log "step 2 : loading dump into staging (triggers disabled to prevent audit pollution)"
+# step 3: load dump into staging
+log "step 3 : loading dump into staging (triggers disabled to prevent audit pollution)"
 # SESSION_REPLICATION_ROLE = replica disables all non-replica triggers,
 # preventing millions of audit_log entries for bulk-loaded data.
 {
@@ -68,14 +73,14 @@ log "step 2 : loading dump into staging (triggers disabled to prevent audit poll
   echo "SET SESSION_REPLICATION_ROLE = default;"
 } | psql "$STAGING_DB_URL"
 
-log "step 2 : done"
+log "step 3 : done"
 
-# step 3: seed dev members (only bkc.org users)
+# step 4: seed dev members (only bkc.org users)
 # Insert staging-only test members so devs can log in after a dump.
 # These emails match auth.users and are skipped by the obfuscator.
-log "step 3 : seeding dev test members"
+log "step 4 : seeding dev test members"
 
 psql "$STAGING_DB_URL" -f "$SCRIPT_DIR/seed-dev-members.sql"
 
-log "step 3 : done"
+log "step 4 : done"
 log "dump complete — staging is ready for obfuscation"
