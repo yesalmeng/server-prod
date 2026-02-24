@@ -13,11 +13,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# ── helpers ────────────────────────────────────────────────────────
+# helpers
 log()  { echo "==> [$(date '+%H:%M:%S')] $*"; }
 fail() { echo "!!! [$(date '+%H:%M:%S')] ERROR: $*" >&2; exit 1; }
 
-# ── preflight checks ──────────────────────────────────────────────
+# preflight checks
 [[ -z "${STAGING_DB_URL:-}" ]]        && fail "STAGING_DB_URL is not set"
 [[ -z "${SUPABASE_PROJECT_REF:-}" ]]  && fail "SUPABASE_PROJECT_REF is not set"
 [[ -z "${SUPABASE_ACCESS_TOKEN:-}" ]] && fail "SUPABASE_ACCESS_TOKEN is not set"
@@ -28,7 +28,7 @@ command -v supabase   >/dev/null 2>&1 || fail "supabase CLI not found"
 # step 1: truncate all public tables 
 # Dynamically truncate every table in the public schema.
 # CASCADE handles foreign key deps. We skip views.
-# Note: this does NOT touch the audit schema (requirement: skip audit logs).
+# Note: audit schema is preserved (not truncated, not dumped in step 2).
 log "step 1 : truncating public tables in staging"
 
 psql "$STAGING_DB_URL" <<'SQL'
@@ -50,16 +50,27 @@ SQL
 
 log "step 1 : done"
 
-# ── step 2: link to prod + pipe dump into staging ─────────────────
+# step 2: link to prod + dump to temp file
 log "step 2 : linking to prod project"
 supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
-log "step 2 : dumping prod data into staging (piped, no intermediate file)"
-supabase db dump --data-only | psql "$STAGING_DB_URL"
+log "step 2 : dumping prod data to temp file (public schema only)"
+TEMP_DUMP=$(mktemp)
+trap "rm -f $TEMP_DUMP" EXIT  # clean up temp file on exit
+supabase db dump --data-only --schema=public > "$TEMP_DUMP"
+
+log "step 2 : loading dump into staging (triggers disabled to prevent audit pollution)"
+# SESSION_REPLICATION_ROLE = replica disables all non-replica triggers,
+# preventing millions of audit_log entries for bulk-loaded data.
+{
+  echo "SET SESSION_REPLICATION_ROLE = replica;"
+  cat "$TEMP_DUMP"
+  echo "SET SESSION_REPLICATION_ROLE = default;"
+} | psql "$STAGING_DB_URL"
 
 log "step 2 : done"
 
-# ── step 3: seed dev test members ─────────────────────────────────
+# step 3: seed dev members (only bkc.org users)
 # Insert staging-only test members so devs can log in after a dump.
 # These emails match auth.users and are skipped by the obfuscator.
 log "step 3 : seeding dev test members"
